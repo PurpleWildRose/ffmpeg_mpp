@@ -230,7 +230,67 @@ if (EXISTS "${PROJECT_SOURCE_DIR}/.git")
     # 寻找git包
     find_host_package(Git)
     if (GIT_FOUND)
+        # 设置git log的日志输出方式
+        #----------------------------------------------------------
+        # %h：提交的短哈希值（缩写的 commit ID，通常是 7 个字符）
+        # author: ：固定文本，用于标识后续的作者信息
+        # %<|(30)%an：
+        # %an：提交作者的名字（author name）
+        # %<|(30)：将作者名字左对齐，并限制在 30 个字符宽度内（超出会截断，不足会补空格）
+        # %cd：提交日期（commit date），结合--date=short选项时会显示为YYYY-MM-DD格式
+        # %s：提交说明的标题（subject），即提交时的简短描述
+        #----------------------------------------------------------
         set(GIT_LOG_FORMAT "%h author: %<|(30)%an %cd %s")
+        # 用于获取当前 Git 仓库中最近一次提交的信息
+        #----------------------------------------------------------
+        # ${GIT_EXECUTABLE}：Git 程序路径（由find_host_package(Git)获取）
+        # log -1：获取最近 1 次提交的日志
+        # --oneline：简洁输出模式（每行一个提交）
+        # --date=short：日期格式简化（如2023-10-01）
+        # --pretty=format:${GIT_LOG_FORMAT}：按自定义格式输出，${GIT_LOG_FORMAT}是预先定义的格式字符串（如包含提交哈希、作者、日期、说明等）
+        #----------------------------------------------------------
+        execute_process(COMMAND ${GIT_EXECUTABLE} log -1 --oneline --date=short --pretty=format:${GIT_LOG_FORMAT}
+            WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}         # 指定命令执行的工作目录
+            OUTPUT_VARIABLE EXEC_OUT                        # 存储命令的标准输出结果（即 Git 日志信息）
+            ERROR_VARIABLE EXEC_ERROR                       # 存储命令的错误输出（如 Git 命令执行失败的原因）
+            RESULT_VARIABLE EXEC_RET                        # 存储命令的返回值（0 表示成功，非 0 表示失败）
+            OUTPUT_STRIP_TRAILING_WHITESPACE                # 去除输出结果末尾的空白字符（换行符、空格等）
+            ERROR_STRIP_TRAILING_WHITESPACE)                # 去除错误信息末尾的空白字符
+
+        # 输出git log的信息
+        if (NOT EXEC_RET)
+            set(VERSION_INFO ${EXEC_OUT})
+            message(STATUS "current version:   ${VERSION_INFO}")
+            string(REPLACE "\"" "\\\"" VERSION_INFO ${VERSION_INFO})
+            set(VERSION_INFO "\"${VERSION_INFO}\"")
+        else()
+            message(STATUS "git ret ${EXEC_RET}")
+            message(STATUS "${EXEC_ERROR}")
+        endif()
+
+        # %d：提交关联的分支或标签信息（如(HEAD -> main, tag: v1.0)）
+        set(GIT_LOG_FORMAT "%h author: %<|(30)%an %cd %s %d")
+
+        message(STATUS "git version history:")
+        foreach (CNT RANGE ${VERSION_MAX_CNT})
+            execute_process(COMMAND ${GIT_EXECUTABLE} log HEAD~${CNT} -1 --oneline --date=short --pretty=format:${GIT_LOG_FORMAT}
+                WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+                OUTPUT_VARIABLE EXEC_OUT
+                ERROR_VARIABLE EXEC_ERROR
+                RESULT_VARIABLE EXEC_RET
+                OUTPUT_STRIP_TRAILING_WHITESPACE
+                ERROR_STRIP_TRAILING_WHITESPACE)
+
+            if (NOT EXEC_RET)
+                set(VERSION_LOG ${EXEC_OUT})
+                string(REPLACE "\"" "\\\"" VERSION_LOG ${VERSION_LOG})
+                message(STATUS ${VERSION_LOG})
+                set(VERSION_HISTORY_${CNT} "\"${VERSION_LOG}\"")
+                math(EXPR VERSION_CNT "${VERSION_CNT}+1")
+            endif()
+        endforeach(CNT)
+        message(STATUS "total ${VERSION_CNT} git version recorded")
+
     endif(GIT_FOUND)
 
 endif(EXISTS "${PROJECT_SOURCE_DIR}/.git")
